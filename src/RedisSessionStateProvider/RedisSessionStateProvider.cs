@@ -17,6 +17,10 @@ namespace Microsoft.Web.Redis
         internal string sessionId;
         internal object sessionLockId;
         private const int FROM_MIN_TO_SEC = 60;
+
+        // Allow a max lock age on a session so if a process fails to release a lock due to
+        // connection failure it will eventually free.
+        private const int MAX_LOCK_AGE = 20;
         
         internal static ProviderConfiguration configuration;
         internal static object configurationCreationLock = new object();
@@ -234,7 +238,13 @@ namespace Microsoft.Web.Redis
                 // lock has been taken more than http request timeout than ASP.NET calls ReleaseItemExclusive and calls this method again to get lock.
                 if (locked) 
                 {
+                    LogUtility.LogInfo("GetItemFromSessionStore => IS LOCKED");
                     lockAge = cache.GetLockAge(lockId);
+                    LogUtility.LogInfo("GetItemFromSessionStore => LockAge: {0}.", lockAge.ToString());
+                    if (lockAge.TotalSeconds > MAX_LOCK_AGE)
+                    {
+                        ReleaseItemExclusive(context, id, lockId);
+                    }
                     return null;
                 }
 
